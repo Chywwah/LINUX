@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#Xcript a executer au niveau du client local souhaitant utiliser le serveur local
+#Script a executer au niveau du client local souhaitant utiliser le serveur local
 if [ -z "$1" ];then
 	echo "./repo.sh <IP _SERVEUR>"
 	exit
