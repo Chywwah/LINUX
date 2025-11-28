@@ -63,32 +63,43 @@ look_limit_data(){
                         for user in $bad_user;do
 				send_mail $user "$(sed -n "4p" <<< $(repquota -g /data))" "$line" 
                         done
-			send_mail $bad_group "$(sed -n "4p" <<< $(repquota -g /data))" "$line" #groupe principal
+			send_mail $bad_group "$(sed -n "4p" <<< $(repquota -g /data))" "$line" #user du groupe principal
                 fi
         done <<< "$check_list"
 }
 
 send_every_day_mail(){
-	echo "#!/bin/bash" >> /root/every_day.sh
-	bad_group=$(echo "$line" |awk '$2=="++" || $2=="-+" || $2 == "+-" {print $1}') > /root/every_day.sh
-	bad_user=$(repquota /home |sed "1,5d" |awk '$3>=$4 && $1 != ""{print $1}') >> /root/every_day.sh
-	if [ -n "$bad_user" ] || [ -n "$bad_group" ] ;then >> /root/every_day.sh
-		/root/make_quota.sh >>  /root/every_day.sh
+	if [ ! -f "/root/every_day.sh" ];then
+		cat << 'EOF' > /root/every_day.sh 
+#!/bin/bash
+bad_group=$(echo "$(repquota -g /data)" |awk '$2=="++" || $2=="-+" || $2=="+-" {print $1}')
+bad_user=$(repquota /home |sed "1,5d" |awk '$3>=$4 && $1 != ""{print $1}')
+if [ -n "$bad_user" ] || [ -n "$bad_group" ] || [ "$(cat /etc/passwd |wc -l)" != "$(cat /root/.user_number)" ];then #limte depasse ou nouvel utilisateur
+/root/make_quota.sh
+echo "$(cat /etc/passwd |wc -l)" > /root/.user_number
+fi
+EOF
 	fi
+	chmod +x /root/every_day.sh
 }
 
 
 make_cron(){
-	crontab -l 2>/dev/null > temp || touch temp
-	grep -q "make_quota.sh" temp || echo "0 12 * * 1 /root/make_quota.sh" >> temp
-	grep -q "make_quota.sh" <<< "$(crontab -l)" | echo "0 12 * * * /root/every_day.sh" >> temp
+	send_every_day_mail 
+	crontab -l 2>/dev/null > temp || touch temp #soit il y deja de crontab et on l edite ou on en cree un nouveau
+	grep -q "make_quota.sh" temp || echo "0 12 * * 1 /root/make_quota.sh" >> temp #si deja configure on n'ajoute plus
+	grep -q "every_day.sh" <<< "$(crontab -l)" || echo "0 12 * * * /root/every_day.sh" >> temp #envoie de message tous les jours
 	crontab temp
 	rm -f temp
 }
 
-make_quota_home 2>/dev/null 
+if [ ! -f "/root/make_quota.sh" ];then
+	cp ./make_quota.sh /root/make_quota.sh
+fi
+
+make_quota_home 2>/dev/null
 look_limit_home 2>/dev/null 
 make_quota_data 2>/dev/null 
-look_limit_data 2>/dev/null 
+look_limit_data  2>/dev/null 
 make_cron 2>/dev/null 
 
